@@ -45,5 +45,6 @@ The application manages emigrant data across multiple dimensions:
 
 
 
-**Made with ❤️ for ITD112 Lab Assignment - Comprehensive Filipino Emigrants Database Platform**
-**hehe sir pol flat one pls**
+**MITD112 Lab Assignment - Comprehensive Filipino Emigrants Database Platform**
+** araviel🩷 **
+
