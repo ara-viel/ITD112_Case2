@@ -1,0 +1,307 @@
+import React, { useEffect, useState } from "react";
+import { Bar } from "react-chartjs-2";
+
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import ChartDataLabels from "chartjs-plugin-datalabels";
+
+import {
+  getEmigrants,
+  addEmigrant,
+  updateEmigrant,
+  deleteEmigrant,
+} from "../services/emigrantsService";
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ChartDataLabels);
+
+const CivilStatusDataset = () => {
+  const [civilStatus, setCivilStatus] = useState([]);
+  const [form, setForm] = useState({
+    year: "",
+    single: "",
+    married: "",
+    widower: "",
+    separated: "",
+    divorced: "",
+    notReported: "",
+  });
+  const [selectedYear, setSelectedYear] = useState("All");
+  const [availableYears, setAvailableYears] = useState([]);
+  const [showRecords, setShowRecords] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+
+  // 🔹 Fetch Data
+  const fetchData = async () => {
+    const data = await getEmigrants();
+    const cleaned = data.map((d) => ({
+      id: d.id,
+      year: Number(d.year || d.YEAR || 0),
+      single: Number(d.single || d.Single || 0),
+      married: Number(d.married || d.Married || 0),
+      widower: Number(d.widower || d.Widower || 0),
+      separated: Number(d.separated || d.Separated || 0),
+      divorced: Number(d.divorced || d.Divorced || 0),
+      notReported: Number(d.notReported || d["Not Reported"] || 0),
+    }));
+
+    // 🔽  sorting here
+    const sorted = [...cleaned].sort((a, b) => a.year - b.year); // ascending (oldest → newest)
+    // 👉 For descending (latest first), use: (b.year - a.year)
+
+    const years = [...new Set(cleaned.map((d) => d.year))].sort((a, b) => a - b);
+    setAvailableYears(years);
+    setCivilStatus(cleaned);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  // 🔹 Form Handlers
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const handleAdd = async () => {
+    await addEmigrant({
+      year: Number(form.year) || 0,
+      single: Number(form.single) || 0,
+      married: Number(form.married) || 0,
+      widower: Number(form.widower) || 0,
+      separated: Number(form.separated) || 0,
+      divorced: Number(form.divorced) || 0,
+      notReported: Number(form.notReported) || 0,
+    });
+    alert("✅ Record successfully added!");
+    setForm({
+      year: "",
+      single: "",
+      married: "",
+      widower: "",
+      separated: "",
+      divorced: "",
+      notReported: "",
+    });
+    fetchData();
+  };
+
+  const handleDelete = async (id) => {
+    if (window.confirm("Are you sure you want to delete this record?")) {
+      await deleteEmigrant(id);
+      fetchData();
+    }
+  };
+
+  // 🔹 Begin edit
+  const handleEdit = (record) => {
+    setEditId(record.id);
+    setEditForm({ ...record });
+  };
+
+  const handleEditChange = (e) => {
+    setEditForm({ ...editForm, [e.target.name]: e.target.value });
+  };
+
+  const handleSaveEdit = async () => {
+    await updateEmigrant(editId, {
+      year: Number(editForm.year),
+      single: Number(editForm.single),
+      married: Number(editForm.married),
+      widower: Number(editForm.widower),
+      separated: Number(editForm.separated),
+      divorced: Number(editForm.divorced),
+      notReported: Number(editForm.notReported),
+    });
+    setEditId(null);
+    fetchData();
+  };
+
+  const handleCancelEdit = () => {
+    setEditId(null);
+    setEditForm({});
+  };
+
+  // 🔹 Filtered Data
+  const filteredData =
+    selectedYear === "All"
+      ? civilStatus
+      : civilStatus.filter((item) => item.year === parseInt(selectedYear));
+
+  // 🔹 Compute totals
+  const totals = filteredData.reduce(
+    (acc, cur) => {
+      acc.single += cur.single || 0;
+      acc.married += cur.married || 0;
+      acc.widower += cur.widower || 0;
+      acc.separated += cur.separated || 0;
+      acc.divorced += cur.divorced || 0;
+      acc.notReported += cur.notReported || 0;
+      return acc;
+    },
+    { single: 0, married: 0, widower: 0, separated: 0, divorced: 0, notReported: 0 }
+  );
+
+  const totalSum =
+    totals.single +
+    totals.married +
+    totals.widower +
+    totals.separated +
+    totals.divorced +
+    totals.notReported;
+
+  // 🔹 Chart Data
+  const chartData = {
+    labels: ["Civil Status Distribution"],
+    datasets: [
+      { label: "Single", data: [(totals.single / totalSum) * 100], backgroundColor: "#3498db" },
+      { label: "Married", data: [(totals.married / totalSum) * 100], backgroundColor: "#2ecc71" },
+      { label: "Widower", data: [(totals.widower / totalSum) * 100], backgroundColor: "#9b59b6" },
+      { label: "Separated", data: [(totals.separated / totalSum) * 100], backgroundColor: "#f39c12" },
+      { label: "Divorced", data: [(totals.divorced / totalSum) * 100], backgroundColor: "#e74c3c" },
+      { label: "Not Reported", data: [(totals.notReported / totalSum) * 100], backgroundColor: "#95a5a6" },
+    ],
+  };
+
+  const chartOptions = {
+    indexAxis: "y",
+    responsive: true,
+    plugins: {
+      legend: { position: "bottom" },
+      tooltip: {
+        callbacks: {
+          label: (context) => {
+            const dataset = context.dataset;
+            const value = dataset.data[context.dataIndex];
+            const label = dataset.label;
+            const absolute = Math.round((value * totalSum) / 100);
+            return `${label}: ${absolute.toLocaleString()} (${value.toFixed(1)}%)`;
+          },
+        },
+      },
+      datalabels: {
+        color: "#fff",
+        font: { weight: "bold" },
+        formatter: (value) => `${value.toFixed(1)}%`,
+      },
+    },
+    scales: {
+      x: { stacked: true, beginAtZero: true, max: 100, title: { display: true, text: "Percentage (%)" } },
+      y: { stacked: true },
+    },
+  };
+
+  return (
+    <div style={{ padding: 20 }}>
+      <h1>Civil Status Dataset (CRUD)</h1>
+
+      {/* 🔹 CRUD Add Form */}
+      <div style={{ marginBottom: 20 }}>
+        {Object.keys(form).map((key) => (
+          <input
+            key={key}
+            name={key}
+            placeholder={key}
+            value={form[key]}
+            onChange={handleChange}
+            style={{ margin: 5 }}
+          />
+        ))}
+        <button onClick={handleAdd}>Add</button>
+      </div>
+
+      {/* 🔹 Toggle for Records */}
+      <button onClick={() => setShowRecords(!showRecords)} style={{ marginBottom: 10 }}>
+        {showRecords ? "Hide Records" : "Show Records"}
+      </button>
+
+      {/* 🔹 Records Table */}
+      {showRecords && (
+        <div style={{ overflowX: "auto", marginBottom: 20 }}>
+          <table border="1" cellPadding="5">
+            <thead>
+              <tr>
+                <th>Year</th>
+                <th>Single</th>
+                <th>Married</th>
+                <th>Widower</th>
+                <th>Separated</th>
+                <th>Divorced</th>
+                <th>Not Reported</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {civilStatus.map((e) => (
+                <tr key={e.id}>
+                  {editId === e.id ? (
+                    <>
+                      {Object.keys(editForm).map(
+                        (key) =>
+                          key !== "id" && (
+                            <td key={key}>
+                              <input
+                                name={key}
+                                value={editForm[key]}
+                                onChange={handleEditChange}
+                                style={{ width: "70px" }}
+                              />
+                            </td>
+                          )
+                      )}
+                      <td>
+                        <button onClick={handleSaveEdit}>Save</button>
+                        <button onClick={handleCancelEdit}>Cancel</button>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td>{e.year}</td>
+                      <td>{e.single}</td>
+                      <td>{e.married}</td>
+                      <td>{e.widower}</td>
+                      <td>{e.separated}</td>
+                      <td>{e.divorced}</td>
+                      <td>{e.notReported}</td>
+                      <td>
+                        <button onClick={() => handleEdit(e)}>Update</button>
+                        <button onClick={() => handleDelete(e.id)}>Delete</button>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* 🔹 Year Filter */}
+      <div style={{ marginTop: 20 }}>
+        <label style={{ fontWeight: "bold" }}>Filter by Year:</label>{" "}
+        <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}>
+          <option value="All">All Years</option>
+          {availableYears.map((year) => (
+            <option key={year} value={year}>
+              {year}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* 🔹 Chart */}
+      <div style={{ height: "600px", marginTop: 30 }}>
+        <Bar data={chartData} options={chartOptions} />
+      </div>
+    </div>
+  );
+};
+
+export default CivilStatusDataset;
